@@ -1,16 +1,16 @@
 import struct
 
-protocol_name = 'MCAST'
-protocol_version = 1
+protocol_name = 'FMP'
+protocol_version = '1'
 start_packet_type = 'S'
 end_packet_type = 'E'
 data_packet_type = 'D'
 
 
 class StreamStartPacket(object):
-	protocol_name = 'MCAST'
+	protocol_name = 'FMP'
 	protocol_version = 1
-	packet_structure = '5s B c L L 20s' 
+	packet_structure = '3s c c L L 20s' 
 
 	def __init__ (self, file_name, packet_size, number_of_packets):
 		self.file_name = file_name
@@ -34,16 +34,38 @@ class StreamStartPacket(object):
 
 
 class StreamEndPacket(object):
+	packet_structure = '3s c c'
 
-	def __init__ (self):
-		self.payload = "EOF"
+	@staticmethod	
+	def pack():
+		return struct.pack(
+			StreamEndPacket.packet_structure,
+			protocol_name, 
+			protocol_version,
+			end_packet_type)
+	
+	@staticmethod	
+	def unpack(data):
+		return struct.unpack(StreamEndPacket.packet_structure, data)		
 
 
 class DataPacket(object):
+	packet_structure = '3s c c H H'
 
-	def __init__ (self, header, payload):
-		self.header = header
-		self.payload = payload
+	@staticmethod
+	def packHeader(packet_number, payload_size):
+		return struct.pack(
+			DataPacket.packet_structure,
+			protocol_name, 
+			protocol_version,
+			data_packet_type,
+			packet_number,
+			payload_size)
+	
+	@staticmethod	
+	def unpackHeader(data):
+		return struct.unpack(DataPacket.packet_structure, data)
+
 
 
 
