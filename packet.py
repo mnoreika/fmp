@@ -1,16 +1,9 @@
 import struct
-
-protocol_name = 'FMP'
-protocol_version = '1'
-start_packet_type = 'S'
-end_packet_type = 'E'
-data_packet_type = 'D'
+import protocol
 
 
 class StreamStartPacket(object):
-	protocol_name = 'FMP'
-	protocol_version = 1
-	packet_structure = '3s c c L L 20s' 
+	packet_structure = '3s c c H H 20s' 
 
 	def __init__ (self, file_name, packet_size, number_of_packets):
 		self.file_name = file_name
@@ -21,9 +14,9 @@ class StreamStartPacket(object):
 	def pack(self):
 		return struct.pack(
 			self.packet_structure,
-			protocol_name, 
-			protocol_version,
-			self.protocol_packet_type, 
+			protocol.name, 
+			protocol.version,
+			protocol.start_packet_type, 
 		 	self.packet_size, 
 		 	self.number_of_packets,
 		 	self.file_name)
@@ -40,9 +33,9 @@ class StreamEndPacket(object):
 	def pack():
 		return struct.pack(
 			StreamEndPacket.packet_structure,
-			protocol_name, 
-			protocol_version,
-			end_packet_type)
+			protocol.name, 
+			protocol.version,
+			protocol.end_packet_type)
 	
 	@staticmethod	
 	def unpack(data):
@@ -56,9 +49,9 @@ class DataPacket(object):
 	def packHeader(packet_number, payload_size):
 		return struct.pack(
 			DataPacket.packet_structure,
-			protocol_name, 
-			protocol_version,
-			data_packet_type,
+			protocol.name, 
+			protocol.version,
+			protocol.data_packet_type,
 			packet_number,
 			payload_size)
 	
@@ -66,6 +59,41 @@ class DataPacket(object):
 	def unpackHeader(data):
 		return struct.unpack(DataPacket.packet_structure, data)
 
+class RequestPacket(object):
+	packet_structure = '3s c c H'
 
+	@staticmethod
+	def packHeader(number_of_packets):
+		return struct.pack(
+			RequestPacket.packet_structure,
+			protocol.name,
+			protocol.version,
+			protocol.request_packet_type,
+			number_of_packets)
 
+	@staticmethod
+	def unpackHeader(data):
+		return struct.unpack(RequestPacket.packet_structure, data)
 
+	@staticmethod
+	def packPayload(number_of_packets, packet_list):
+		return struct.pack("%dH" % number_of_packets, *packet_list)	
+
+	@staticmethod
+	def unpackPayload(number_of_packets, data):
+		return struct.unpack("%dH" % number_of_packets, data)		
+
+class SuccessPacket(object):
+	packet_structure = '3s c c'
+
+	@staticmethod
+	def packHeader():
+		return struct.pack(
+			SuccessPacket.packet_structure,
+			protocol.name,
+			protocol.version,
+			protocol.success_packet_type)
+
+	@staticmethod
+	def unpackHeader(data):
+		return struct.unpack(SuccessPacket.packet_structure, data)
