@@ -87,7 +87,7 @@ class SuccessPacket(object):
 	packet_structure = '3s c c'
 
 	@staticmethod
-	def packHeader():
+	def pack():
 		return struct.pack(
 			SuccessPacket.packet_structure,
 			protocol.name,
@@ -95,5 +95,5 @@ class SuccessPacket(object):
 			protocol.success_packet_type)
 
 	@staticmethod
-	def unpackHeader(data):
+	def unpack(data):
 		return struct.unpack(SuccessPacket.packet_structure, data)

@@ -46,8 +46,8 @@ while True:
 		print >> sys.stderr, 'Received "%s" from %s' % (data, server)
 		print >> sys.stderr, 'Starting file transmission...'
 
-		with open("movie.mjpeg", "rb") as f:
-				byte = f.read(1)
+		with open("movie.mjpeg", "rb") as file:
+				byte = file.read(1)
 				payload = bytearray()
 
 				packet_number = 0
@@ -67,7 +67,7 @@ while True:
 						sendPacket(dataPacket)
 						payload = bytearray()	
 					
-					byte = f.read(1)
+					byte = file.read(1)
 
 				packet_number += 1
 
@@ -101,11 +101,28 @@ while True:
 			if (data[4:5] == protocol.request_packet_type):
 				print >> sys.stderr, "Request packet received."
 
-				packet_header = RequestPacket.unpackHeader(data[:8])
-				packet_payload = RequestPacket.unpackPayload(packet_header[3], data[8:])
+				request_packet_header = RequestPacket.unpackHeader(data[:8])
+				request_packet_payload = RequestPacket.unpackPayload(request_packet_header[3], data[8:])
 
-				print >> sys.stderr, packet_header
-				print >> sys.stderr, packet_payload
+				print >> sys.stderr, request_packet_header
+
+				with open("movie.mjpeg", "rb") as file:
+					for missed_packet in request_packet_payload:
+						file.seek((missed_packet - 1) * 118)
+						dataPayload = file.read(128)
+						dataPacketHeader = DataPacket.packHeader(missed_packet, len(dataPayload))
+						dataPacket = dataPacketHeader + dataPayload
+						sendPacket(dataPacket)
+
+				#Sending end of stream packet		
+				endPacket = StreamEndPacket.pack()
+
+				sendPacket(endPacket);	
+
+			if (data[4:5] == protocol.success_packet_type):
+				print >> sys.stderr, "Transmission success."
+				break
+				
 		else:
 			print >> sys.stderr, "Invalid protocol. Packet dropped."		
 

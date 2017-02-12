@@ -42,13 +42,14 @@ def parsePacket(data):
 		readStreamStartPacket(data)
 
 	if (data[4:5] == protocol.data_packet_type):
-		# print >> sys.stderr, 'Data packet received.'
-
 		packet = DataPacket.unpackHeader(data[:10]);
 
 		packet_number += 1
 
-		if (packet_number != packet[3]):
+		if (packet[3] in packets_missed):
+			packets_missed.remove(packet[3])
+
+		elif (packet_number != packet[3]):
 			packets_missed.append(packet_number)
 
 			packet_number += 1
@@ -82,24 +83,29 @@ def readStreamEndPacket(data):
 	print >> sys.stderr, "# End of stream packet received #"
 	print >> sys.stderr, packet
 
-	file.close()
-
 	global packet_number
 	print >> sys.stderr, "Packets received: %d\n" % (packet_number - len(packets_missed))
 
-	# Check if packets are missing and request the mising ones 
-	print >> sys.stderr, "Packets missed: %d \n %s" % (len(packets_missed), packets_missed)
+	if (len(packets_missed) != 0):
+		# Check if packets are missing and request the mising ones 
+		print >> sys.stderr, "Packets missed: %d \n %s" % (len(packets_missed), packets_missed)
 
-	requestPacket = RequestPacket.packHeader(len(packets_missed)) + RequestPacket.packPayload(len(packets_missed) , packets_missed)
+		requestPacket = RequestPacket.packHeader(len(packets_missed)) + RequestPacket.packPayload(len(packets_missed) , packets_missed)
 
-	print >> sys.stderr, "Sending request packet: %d bytes" % len(requestPacket)
+		print >> sys.stderr, "Sending request packet: %d bytes" % len(requestPacket)
 
- 	sock.sendto(requestPacket, address)
+	 	sock.sendto(requestPacket, address)
+	else:
+		success_packet = SuccessPacket.pack()
 
+		print >> sys.stderr, "Sending success packet: %d bytes" % len (success_packet)
+
+		sock.sendto(success_packet, address)
+ 
 def readDataPacket(packet, data):
 	file.seek(118 * (packet[3] - 1))
 
-	file.write(data[10:(7 + packet[4])])
+	file.write(data[10:(10 + packet[4])])
 
 print >> sys.stderr, 'Waiting for data...'
 
