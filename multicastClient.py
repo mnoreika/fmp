@@ -18,6 +18,11 @@ group = socket.inet_aton(protocol.multicast_ip)
 mreq = struct.pack('4sL', group, socket.INADDR_ANY)
 sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
 
+
+tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+tcp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+
 packet_number = 0
 packets_missed = []
 
@@ -28,7 +33,7 @@ def acknowledgeReceipt():
 	print >> sys.stderr, '\n# File is being transmitted #\n'
 
 
-def parsePacket(data):
+def parsePacket(data, address):
 	global packet_number
 	global packets_missed
 
@@ -39,7 +44,7 @@ def parsePacket(data):
 
 		packets_missed = []
 
-		readStreamStartPacket(data)
+		readStreamStartPacket(data, address)
 
 	if (data[4:5] == protocol.data_packet_type):
 		packet = DataPacket.unpackHeader(data[:10]);
@@ -61,7 +66,9 @@ def parsePacket(data):
 		readStreamEndPacket(data)
 
 
-def readStreamStartPacket(data):
+def readStreamStartPacket(data, address):
+	global tcp_socket
+	global file
 	
 	packet = StreamStartPacket.unpack(data)
 
@@ -70,11 +77,13 @@ def readStreamStartPacket(data):
 	file_name = packet[5].split(b'\0',1)[0]
 	print >> sys.stderr, 'File name: %s' % file_name
 
-	global file
-
 	file = open(file_name + ".received", "w+b")
 
-	acknowledgeReceipt()
+	print >> sys.stderr, address[0]
+
+	tcp_socket.connect((address[0], protocol.tcp_port))
+
+	tcp_socket.send("OK")
 
 
 def readStreamEndPacket(data):
@@ -116,7 +125,7 @@ while True:
 	# print >> sys.stderr, 'Received %s bytes from %s' % (len(data), address)
 
 	if (data[:3] == protocol.name):
-		parsePacket(data)
+		parsePacket(data, address)
 	else:
 		print >> sys.stderr, 'Invalid protocol. Packet dropped.'
 
