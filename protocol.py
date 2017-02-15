@@ -2,8 +2,8 @@ name = 'FMP'
 version = '1'
 
 multicast_ip = '228.5.6.7'
-multicast_group = (multicast_ip, 8888)
-server_address = ('', 8888)
+multicast_group = (multicast_ip, 8889)
+server_address = ('', 8889)
 
 tcp_ip = '127.0.0.1'
 tcp_port = 9999
