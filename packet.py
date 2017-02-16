@@ -60,7 +60,7 @@ class DataPacket(object):
 		return struct.unpack(DataPacket.packet_structure, data)
 
 class RequestPacket(object):
-	packet_structure = '3s c c H'
+	packet_structure = "3s c c H"
 
 	@staticmethod
 	def packHeader(number_of_packets):

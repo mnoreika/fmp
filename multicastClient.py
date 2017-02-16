@@ -22,8 +22,6 @@ tcp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 tcp_socket.bind(("", protocol.tcp_port))
 tcp_socket.listen(1)
 
-packet_number = 0
-packets_missed = []
 sockets = [udp_socket]
 
 print >> sys.stderr, 'Waiting for data...\n'

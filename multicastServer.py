@@ -8,6 +8,7 @@ import protocol
 import select
 
 from packet import *
+from sender import *
 
 number_of_clients = 2
 sockets = []
@@ -15,24 +16,14 @@ receivers = ["pc3-010-l.cs.st-andrews.ac.uk", "pc3-009-l.cs.st-andrews.ac.uk"]
 
 start_time = time.clock()
 
-# Sends the packet using multicast to multiple recipients
-def sendPacket(packet):
-	send = udp_sock.sendto(packet, protocol.multicast_group)
-
-start_time = time.clock()
-
-# Create a datagram socket
-udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-# Set timeout for the socket
-udp_sock.settimeout(protocol.socket_timeout)
-
-# Set the time-to-live for messages
+# Set up an UDP socket
+udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+udp_socket.settimeout(protocol.socket_timeout)
 ttl = struct.pack('b', protocol.time_to_live)
-udp_sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
+udp_socket.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
 
 
-startPacket = StreamStartPacket("movie.mjpeg", 1024, 4171)
+startPacket = StreamStartPacket("movie.mjpeg", 228, 36186)
 
 # Establishing connections with the receivers
 for receiver in receivers:
@@ -44,6 +35,8 @@ for receiver in receivers:
 
 clients_listening = 0
 file_sent = False
+number_of_ack = 0
+
 
 while True:
 	input_ready, output_ready, _ = select.select(sockets, [], [])
@@ -54,70 +47,28 @@ while True:
 		print >> sys.stderr, "Received: %d bytes" % len(data)
 
 		if data[4:5] == protocol.success_packet_type:
+			print >> sys.stderr, "Ack."
+
+			number_of_ack += 1
+
+			if number_of_ack == 4:
+				print >> sys.stderr, "File succesfuly sent."
+				sys.exit(0)
 
 			clients_listening += 1;
 
 			if (number_of_clients == clients_listening):
-				with open("movie.mjpeg", "rb") as file:
-					byte = file.read(1)
-					payload = bytearray()
+				send_data(udp_socket)
 
-					packet_number = 0
-
-					while byte != "":
-						payload.append(byte)
-
-						if len(payload) == 118:
-							
-							packet_number += 1
-
-							dataPacketHeader = DataPacket.packHeader(packet_number, 118)
-
-							dataPacket = dataPacketHeader + payload
-
-							sendPacket(dataPacket)
-							payload = bytearray()	
-						
-						byte = file.read(1)
-
-					packet_number += 1
-
-					dataPacketHeader = DataPacket.packHeader(packet_number, len(payload))
-
-					dataPacket = dataPacketHeader + payload;
-
-					sendPacket(dataPacket)
-
-					print >> sys.stderr, "Packets sent %d" % packet_number
-
-					#Sending end of stream packet		
-					endPacket = StreamEndPacket.pack()
-
-					sendPacket(endPacket);
-
-					end_time = time.clock()
-			
-					print >> sys.stderr, "Time taken: %0.5f seconds" % (end_time - start_time)
+				for socket in sockets:
+					socket.send(StreamEndPacket.pack())
+				
 
 		elif data[4:5] == protocol.request_packet_type:
-			request_packet_header = RequestPacket.unpackHeader(data[:8])
-			request_packet_payload = RequestPacket.unpackPayload(request_packet_header[3], data[8:])
+				resend_data(data, udp_socket)
 
-			print >> sys.stderr, request_packet_header
-
-			with open("movie.mjpeg", "rb") as file:
-				for missed_packet in request_packet_payload:
-					file.seek((missed_packet - 1) * 118)
-					dataPayload = file.read(128)
-					dataPacketHeader = DataPacket.packHeader(missed_packet, len(dataPayload))
-					dataPacket = dataPacketHeader + dataPayload
-					sendPacket(dataPacket)
-
-			#Sending end of stream packet		
-			endPacket = StreamEndPacket.pack()
-
-			sendPacket(endPacket);		
-
+				for socket in sockets:
+					socket.send(StreamEndPacket.pack())
 					
 
 # print >> sys.stderr, 'Start of stream packet sent.'
