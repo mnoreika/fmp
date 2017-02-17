@@ -12,9 +12,61 @@ from packet import *
 from sender import *
 
 number_of_clients = 2
-sockets = []
 receivers = ["pc3-014-l.cs.st-andrews.ac.uk", "pc3-009-l.cs.st-andrews.ac.uk"]
 file_name = sys.argv[1]
+
+clients_ready = 0
+
+current_window = 0
+last_window = 10
+
+ack_receivers = []
+
+# Reads acknoledgement
+def read_success_packet(socket):
+	global clients_ready
+	global ack_receivers
+	global current_window
+	global last_window
+	global number_of_clients
+
+	print >> sys.stderr, "Ack."
+
+	# Indicate which receiver acknoledged success of receipt 
+	if (socket not in ack_receivers):
+		ack_receivers.append(socket.getpeername())
+
+
+	# Determine if all receivers received the file
+	if all_received(ack_receivers, number_of_clients) and current_window == last_window:
+		print >> sys.stderr, "File succesfuly sent."
+		
+		sys.exit(0)
+
+	clients_ready += 1
+
+	# When clients are ready, send the file
+	if ((number_of_clients == clients_ready) and all_received(ack_receivers, number_of_clients)):
+		# Moving to the next window
+		current_window += 1
+
+		if (current_window == 2):
+			sys.exit(0)
+
+		ack_receivers = []
+
+		send_data(udp_socket, file_name, current_window)
+
+		for socket in sockets:
+			socket.send(StreamEndPacket.pack())
+
+
+# Reads negative acknoledgement
+def read_request_packet(data):
+	resend_data(data, udp_socket)
+
+	for socket in sockets:
+		socket.send(StreamEndPacket.pack())
 
 # Set up an UDP socket
 udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -25,70 +77,21 @@ udp_socket.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
 # Make file's start of stream packet
 startPacket = generate_start_packet(file_name)
 
-
-# # Establishing connections with the receivers
-for receiver in receivers:
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect((receiver, protocol.tcp_port))
-    sock.setblocking(0)
-
-    sockets.append(sock)
-    print >> sys.stderr, "Connected to receiver: %s" % receiver
-    sock.send(startPacket.pack())
-
-clients_listening = 0
-file_sent = False
-ack_receivers = []
-
-def all_clients_received():
-	if len(ack_receivers) == number_of_clients:
-		return True
-
-	return False	
+# Connect to receivers
+sockets = connect_to_receivers(receivers, startPacket)
 
 
 while True:
 	input_ready, output_ready, _ = select.select(sockets, [], [])
 
+	# Read data from all sockets that are input ready
 	for socket in input_ready:
 		data = socket.recv(protocol.max_packet_size)
 
-		print >> sys.stderr, "Received: %d bytes" % len(data)
-
-		if (data[:3] == protocol.name):
+		if (data[:3] == protocol.name and data[3:4] == protocol.version):
 			if data[4:5] == protocol.success_packet_type:
-				print >> sys.stderr, "Ack."
-
-				print >> sys.stderr, ack_receivers
-
-				if (file_sent == True):
-					if (socket not in ack_receivers):
-						ack_receivers.append(socket.getpeername())
-
-				if all_clients_received() == True:
-					print >> sys.stderr, "File succesfuly sent."
-					for socket in sockets:
-						socket.close()
-					print >> sys.stderr, ack_receivers
-					sys.exit(0)
-
-				clients_listening += 1;
-
-				if (number_of_clients == clients_listening and file_sent == False):
-					send_data(udp_socket)
-
-					print >> sys.stderr, "Sending the whole file..."
-
-					file_sent = True
-
-					for socket in sockets:
-						print >> sys.stderr, len(StreamEndPacket.pack())
-						socket.send(StreamEndPacket.pack())
-
+				read_success_packet(socket)
 
 			elif data[4:5] == protocol.request_packet_type:
-					resend_data(data, udp_socket)
-
-					for socket in sockets:
-						socket.send(StreamEndPacket.pack())
+				read_request_packet(data)
 					

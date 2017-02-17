@@ -11,6 +11,8 @@ tcp_port = 9999
 max_packet_size = 1024
 data_payload_size = 118
 
+window_size = 400
+
 start_packet_type = 'S'
 end_packet_type = 'E'
 data_packet_type = 'D'

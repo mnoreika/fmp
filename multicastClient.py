@@ -27,9 +27,9 @@ sockets = [udp_socket]
 
 print >> sys.stderr, 'Waiting for data...\n'
 
-
 # Receive the data and respond to the sender
 while True:
+	# Connect to a receiver if currently not receiving
 	if len(sockets) == 1:
 		tcp_conn, client_address = tcp_socket.accept()
 		sockets.append(tcp_conn)
@@ -44,9 +44,8 @@ while True:
 		except:
 			print >> sys.stderr, "Connection closed by the sender.\n"
 		
-
 		if data:
-			if (data[:3] == protocol.name):
+			if (data[:3] == protocol.name and data[3:4] == protocol.version):
 				parsePacket(data, tcp_conn)
 			else:
 				print >> sys.stderr, 'Invalid protocol. Packet dropped.'
