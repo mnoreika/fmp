@@ -20,7 +20,8 @@ udp_socket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
 tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 tcp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 tcp_socket.bind(("", protocol.tcp_port))
-tcp_socket.listen(1)
+tcp_socket.listen(5)
+
 
 sockets = [udp_socket]
 
@@ -40,12 +41,17 @@ while True:
 	for socket in input_ready:
 		try:
 			data, address = socket.recvfrom(protocol.max_packet_size)
+		except:
+			print >> sys.stderr, "Connection closed by the sender.\n"
+		
 
+		if data:
 			if (data[:3] == protocol.name):
 				parsePacket(data, tcp_conn)
 			else:
 				print >> sys.stderr, 'Invalid protocol. Packet dropped.'
-		except:
+		else:
+			socket.close()
 			sockets.remove(tcp_conn)
 
           
