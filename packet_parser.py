@@ -104,7 +104,6 @@ def parsePacket(data, tcp_socket):
 
 		readDataPacket(packet, data)
 
-		print >> sys.stderr, "Received: %d" % packet[3]
 
 		# Remove packet from missing list
 		if (packet[3] in packets_missing):

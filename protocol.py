@@ -13,6 +13,8 @@ data_payload_size = 118
 
 window_size = 400
 
+transmission_delay = 0.000001
+
 start_packet_type = 'S'
 end_packet_type = 'E'
 data_packet_type = 'D'
