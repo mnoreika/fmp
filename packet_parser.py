@@ -14,16 +14,25 @@ def send_message(message, tcp_socket):
 # Reads start of stream packet
 def readStreamStartPacket(data, tcp_socket):
 	global file
-	global packet_number
+	global total_packet_number
+	global last_window
+	global window_size
+	global last_window_size
 
-	packet = StreamStartPacket.unpack(data)
+	packet = StreamStartPacket.unpack(data[:34])
 
-	file_name = packet[5].split(b'\0',1)[0]
+	file_name = packet[7].split(b'\0',1)[0]
 	print >> sys.stderr, 'Incoming file: %s' % file_name
 	file = open(file_name + ".received", "w+b")
 
 	# Set the total number of packets expected
-	packet_number = protocol.window_size
+	total_window_size = packet[4]
+
+	window_size = protocol.window_size
+
+	last_window = packet[5]
+
+	last_window_size = packet[6]
 
 	send_message(SuccessPacket.pack(), tcp_socket)
 
@@ -35,9 +44,13 @@ def readStreamEndPacket(data, tcp_socket):
 	global expected_packet
 	global packets_missing
 	global number_of_packets
-	global packet_number
+	global window_size
 	global file_received
-	global stream_finished
+	global window_finished
+	global current_window
+	global last_window
+	global last_window_size
+	global total
 
 
 	print >> sys.stderr, "# EOS #"
@@ -49,12 +62,12 @@ def readStreamEndPacket(data, tcp_socket):
 		return
 
 	# Determine if all packets have been received
-	if (stream_finished == False and expected_packet - 1 != packet_number):
-		for packet_number in range (expected_packet, packet_number + 1):
-			if packet_number not in packets_missing:
-				packets_missing.append(packet_number)
+	if (window_finished == False and expected_packet - 1 != window_size):
+		for window_size in range (expected_packet, window_size + 1):
+			if window_size not in packets_missing:
+				packets_missing.append(window_size)
 
-	stream_finished = True			
+	window_finished = True			
 
 	if len(packets_missing) != 0:
 
@@ -68,55 +81,77 @@ def readStreamEndPacket(data, tcp_socket):
 	else:
 		print >> sys.stderr, "Sending success packet: %d bytes" % len(SuccessPacket.pack())
 
-		file_received = True
+		if (current_window == last_window):
+			file_received = True
+			print >> sys.stderr, "Packets received: %d" % total 
+
+		current_window += 1
+
+		expected_packet = 1
+		packets_missing = []
+		window_finished = False
+
+
+		if (current_window == last_window):
+			window_size = last_window_size
 
  		send_message(SuccessPacket.pack(), tcp_socket)
 
 
 # Reads data packet and writes data to file
-def readDataPacket(packet, data):
-	file.seek(118 * (packet[3] - 1))
-	file.write(data[10:(10 + packet[4])])
+def readDataPacket(packet, data, current_window):
+	file.seek(current_window * protocol.window_size * protocol.data_payload_size + (packet[4] - 1) * protocol.data_payload_size)
+	file.write(data[12:(12 + packet[5])])
 
 # Parses an incoming packet
 def parsePacket(data, tcp_socket):
 	global expected_packet
 	global packets_missing
 	global file_received
-	global stream_finished
+	global window_finished
+	global current_window
+	global total
 	
 	# Read start of stream packet
 	if (data[4:5] == protocol.start_packet_type):
 		expected_packet = 1
 		packets_missing = []
 		file_received = False
-		stream_finished = False
+		window_finished = False
+		current_window = 0
+		total = 0
 
 		readStreamStartPacket(data, tcp_socket)
 
 	if (data[4:5] == protocol.data_packet_type):
-		packet = DataPacket.unpackHeader(data[:10])
+		packet = DataPacket.unpackHeader(data[:12])
+
+		if (packet[3] != current_window):
+			print >> sys.stderr, packet[3]
+			print >> sys.stderr, current_window
+			send_message(SuccessPacket.pack(), tcp_socket)
+			return
 
 		# If file already received, ignore other packets
 		if (file_received == True):
 			send_message(SuccessPacket.pack(), tcp_socket)
 			return
 
-		readDataPacket(packet, data)
-
+		readDataPacket(packet, data, current_window)
+		total += 1
 
 		# Remove packet from missing list
-		if (packet[3] in packets_missing):
-			packets_missing.remove(packet[3])
+		if (packet[4] in packets_missing):
+			packets_missing.remove(packet[4])
 			return
 
 		# Add missed packets to the list	
-		if (stream_finished == False):
-			if expected_packet != packet[3]:
-				 for packet_number in range (expected_packet, packet[3]):
+		if (window_finished == False):
+			if expected_packet != packet[4]:
+				 for packet_number in range (expected_packet, packet[4]):
 				 	packets_missing.append(packet_number)
 
-			expected_packet = packet[3] + 1
+			expected_packet = packet[4] + 1
 
 
 	if (data[4:5] == protocol.end_packet_type):

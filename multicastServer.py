@@ -18,7 +18,10 @@ file_name = sys.argv[1]
 clients_ready = 0
 
 current_window = 0
-last_window = 10
+last_window = 0
+last_window_size = 0
+
+all_ready = False
 
 ack_receivers = []
 
@@ -29,6 +32,8 @@ def read_success_packet(socket):
 	global current_window
 	global last_window
 	global number_of_clients
+	global last_window_size
+	global all_ready
 
 	print >> sys.stderr, "Ack."
 
@@ -45,17 +50,28 @@ def read_success_packet(socket):
 
 	clients_ready += 1
 
+	if (number_of_clients == clients_ready):
+		send_data(udp_socket, file_name, current_window, protocol.window_size)
+		for socket in sockets:
+			socket.send(StreamEndPacket.pack())
+			
+		ack_receivers = []
+		all_ready = True
+
+
 	# When clients are ready, send the file
-	if ((number_of_clients == clients_ready) and all_received(ack_receivers, number_of_clients)):
+	if (all_ready == True and all_received(ack_receivers, number_of_clients)):
+		
 		# Moving to the next window
 		current_window += 1
 
-		if (current_window == 2):
-			sys.exit(0)
 
 		ack_receivers = []
 
-		send_data(udp_socket, file_name, current_window)
+		if (current_window == last_window):
+			send_data(udp_socket, file_name, current_window, last_window_size)
+		else:
+			send_data(udp_socket, file_name, current_window, protocol.window_size)	
 
 		for socket in sockets:
 			socket.send(StreamEndPacket.pack())
@@ -63,7 +79,9 @@ def read_success_packet(socket):
 
 # Reads negative acknoledgement
 def read_request_packet(data):
-	resend_data(data, udp_socket)
+	global current_window
+
+	resend_data(data, udp_socket, current_window)
 
 	for socket in sockets:
 		socket.send(StreamEndPacket.pack())
@@ -76,6 +94,9 @@ udp_socket.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
 
 # Make file's start of stream packet
 startPacket = generate_start_packet(file_name)
+
+last_window = startPacket.number_of_windows
+last_window_size = startPacket.last_window_size
 
 # Connect to receivers
 sockets = connect_to_receivers(receivers, startPacket)
