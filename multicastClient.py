@@ -42,16 +42,20 @@ while True:
 		try:
 			data, address = socket.recvfrom(protocol.max_packet_size)
 		except:
-			print >> sys.stderr, "Connection closed by the sender.\n"
-		
+			print >> sys.stderr, "Connection closed by the sender."	
+			sockets.remove(tcp_conn)
+
 		if data:
 			if (data[:3] == protocol.name and data[3:4] == protocol.version):
 				parsePacket(data, tcp_conn)
 			else:
 				print >> sys.stderr, 'Invalid protocol. Packet dropped.'
 		else:
+			print >> sys.stderr, 'Closing connection.'
 			socket.close()
 			sockets.remove(tcp_conn)
+
+	
 
           
 			

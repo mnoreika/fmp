@@ -48,7 +48,7 @@ def connect_to_receivers(receivers, startPacket):
 	    print >> sys.stderr, "Connected to receiver: %s" % receiver
 
 		# Send start of stream packet
-	    sock.send(startPacket.pack())
+	    sock.sendall(startPacket.pack(), 2048)
 
 	  
 	return sockets	
@@ -76,24 +76,22 @@ def send_data(udp_socket, file_name, current_window, window_size):
 	print >> sys.stderr, "Packets sent: %d" % total_sent	
 	
 
-def resend_data(data, udp_socket, current_window):
+def resend_data(data, udp_socket, file_name, current_window):
 	global packet_number
-
-	print >> sys.stderr, len(data)
-
-	print >> sys.stderr, RequestPacket.unpackHeader(data[:8])
 
 	request_packet_header = RequestPacket.unpackHeader(data[:8])
 
 	request_packet_payload = RequestPacket.unpackPayload(request_packet_header[3], data[8:8 + (request_packet_header[3] * 2)])
 
-	with open("movie.mjpeg", "rb") as file:
+	with open(file_name, "rb") as file:
 		for missed_packet in request_packet_payload:
 			file.seek(current_window * protocol.window_size * protocol.data_payload_size + (missed_packet - 1) * protocol.data_payload_size)
 			dataPayload = file.read(protocol.data_payload_size)
 			dataPacketHeader = DataPacket.packHeader(missed_packet, current_window, len(dataPayload))
 			dataPacket = dataPacketHeader + dataPayload	
 			sendPacket(dataPacket, udp_socket)
+
+			time.sleep(protocol.transmission_delay)
 
 
 # Checks if all received got the file

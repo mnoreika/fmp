@@ -31,15 +31,16 @@ class StreamStartPacket(object):
 
 
 class StreamEndPacket(object):
-	packet_structure = '3s c c'
+	packet_structure = '3s c c H'
 
 	@staticmethod	
-	def pack():
+	def pack(window_number):
 		return struct.pack(
 			StreamEndPacket.packet_structure,
 			protocol.name, 
 			protocol.version,
-			protocol.end_packet_type)
+			protocol.end_packet_type,
+			window_number)
 	
 	@staticmethod	
 	def unpack(data):
@@ -89,15 +90,16 @@ class RequestPacket(object):
 		return struct.unpack("%dH" % number_of_packets, data)		
 
 class SuccessPacket(object):
-	packet_structure = '3s c c'
+	packet_structure = '3s c c H'
 
 	@staticmethod
-	def pack():
+	def pack(window_number):
 		return struct.pack(
 			SuccessPacket.packet_structure,
 			protocol.name,
 			protocol.version,
-			protocol.success_packet_type)
+			protocol.success_packet_type,
+			window_number)
 
 	@staticmethod
 	def unpack(data):

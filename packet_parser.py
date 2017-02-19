@@ -3,10 +3,11 @@ import sys
 
 from packet import *
 
+
 # Sends a control message using TCP
 def send_message(message, tcp_socket):
 	try:
-		tcp_socket.send(message)
+		tcp_socket.sendall(message, 2048)
 	except:
 		print >> sys.stderr, "Connection closed by the sender.\n"
 
@@ -34,12 +35,12 @@ def readStreamStartPacket(data, tcp_socket):
 
 	last_window_size = packet[6]
 
-	send_message(SuccessPacket.pack(), tcp_socket)
+	send_message(SuccessPacket.pack(current_window), tcp_socket)
 
 
 # Reads end of stream packet
 def readStreamEndPacket(data, tcp_socket):
-	packet = StreamEndPacket.unpack(data[:5])
+	packet = StreamEndPacket.unpack(data[:8])
 
 	global expected_packet
 	global packets_missing
@@ -50,14 +51,21 @@ def readStreamEndPacket(data, tcp_socket):
 	global current_window
 	global last_window
 	global last_window_size
+
 	global total
 
+	if (packet[3] < current_window):
+		send_message(SuccessPacket.pack(current_window - 1), tcp_socket)
+		return
 
-	print >> sys.stderr, "# EOS #"
+	if (packet[3] > current_window):
+		return
+
+	print >> sys.stderr, "# EOS of Window  %d #" % packet[3] 
 
 	# If file already received, ignore other packets
 	if (file_received == True):
-		send_message(SuccessPacket.pack(), tcp_socket)
+		send_message(SuccessPacket.pack(current_window), tcp_socket)
 		print >> sys.stderr, "Sending success packet 1"
 		return
 
@@ -74,16 +82,24 @@ def readStreamEndPacket(data, tcp_socket):
 		# Check if packets are missing and request the mising ones 
 		print >> sys.stderr, "Missing packets: %d \n" % (len(packets_missing))
 
-		requestPacket = RequestPacket.packHeader(len(packets_missing)) + RequestPacket.packPayload(len(packets_missing) , packets_missing)
+		if (len(packets_missing) > 400):
+			request_list = packets_missing[0: 400]
+			requestPacket = RequestPacket.packHeader(len(request_list)) + RequestPacket.packPayload(len(request_list) , request_list)
+			send_message(requestPacket, tcp_socket)
+		else:
+			requestPacket = RequestPacket.packHeader(len(packets_missing)) + RequestPacket.packPayload(len(packets_missing) , packets_missing)
 
- 		send_message(requestPacket, tcp_socket)
+	 		send_message(requestPacket, tcp_socket)
 
 	else:
-		print >> sys.stderr, "Sending success packet: %d bytes" % len(SuccessPacket.pack())
+		print >> sys.stderr, "Sending success packet: %d bytes" % len(SuccessPacket.pack(current_window))
+
+		
 
 		if (current_window == last_window):
 			file_received = True
 			print >> sys.stderr, "Packets received: %d" % total 
+			print >> sys.stderr, "File succesfuly received."
 
 		current_window += 1
 
@@ -91,12 +107,14 @@ def readStreamEndPacket(data, tcp_socket):
 		packets_missing = []
 		window_finished = False
 
-
 		if (current_window == last_window):
 			window_size = last_window_size
 
- 		send_message(SuccessPacket.pack(), tcp_socket)
+		print >> sys.stderr, "ACK WINDOW %d" % (current_window - 1)
+ 		send_message(SuccessPacket.pack(current_window - 1), tcp_socket)	
 
+		
+ 	
 
 # Reads data packet and writes data to file
 def readDataPacket(packet, data, current_window):
@@ -127,14 +145,11 @@ def parsePacket(data, tcp_socket):
 		packet = DataPacket.unpackHeader(data[:12])
 
 		if (packet[3] != current_window):
-			print >> sys.stderr, packet[3]
-			print >> sys.stderr, current_window
-			send_message(SuccessPacket.pack(), tcp_socket)
 			return
 
 		# If file already received, ignore other packets
 		if (file_received == True):
-			send_message(SuccessPacket.pack(), tcp_socket)
+			send_message(SuccessPacket.pack(current_window), tcp_socket)
 			return
 
 		readDataPacket(packet, data, current_window)
