@@ -7,25 +7,22 @@ import time
 import protocol
 import select
 
-from collections import defaultdict
 from packet import *
 from sender import *
 
-number_of_clients = 3
-receivers = ["pc3-014-l.cs.st-andrews.ac.uk", "pc3-009-l.cs.st-andrews.ac.uk", "pc3-022-l.cs.st-andrews.ac.uk"]
+number_of_clients = 2
+receivers = ["pc3-014-l.cs.st-andrews.ac.uk", "pc3-009-l.cs.st-andrews.ac.uk"]
 file_name = sys.argv[1]
 
 clients_ready = 0
-
 current_window = 0
 last_window = 0
 last_window_size = 0
-
 all_ready = False
-
 ack_receivers = []
 
-# Reads acknoledgement
+
+# Reads acknowledgment
 def read_success_packet(socket, data):
 	global ack_receivers
 	global current_window
@@ -36,14 +33,14 @@ def read_success_packet(socket, data):
 
 	packet = SuccessPacket.unpack(data[:8])
 
-	# Indicate which receiver acknoledged success of receipt 
+	# Indicate which receiver acknowledged success of receipt 
 	if (socket.getpeername() not in ack_receivers and packet[3] == current_window):
 		ack_receivers.append(socket.getpeername())
 
 
 	# Determine if all receivers received the file
 	if all_received(ack_receivers, number_of_clients) and current_window == last_window:
-		print >> sys.stderr, "File succesfuly sent."
+		print >> sys.stderr, "File successfully sent."
 		
 		sys.exit(0)
 
@@ -51,8 +48,7 @@ def read_success_packet(socket, data):
 	if (all_ready == False and all_received(ack_receivers, number_of_clients)):
 		send_data(udp_socket, file_name, current_window, protocol.window_size)
 
-		for socket in sockets:
-			socket.sendall(StreamEndPacket.pack(current_window), 2048)
+		send_eos(sockets, current_window)
 			
 		ack_receivers = []
 		all_ready = True
@@ -60,7 +56,6 @@ def read_success_packet(socket, data):
 
 	# When clients are ready, send the file
 	if (all_ready == True and all_received(ack_receivers, number_of_clients)):
-
 		# Moving to the next window
 		current_window += 1
 
@@ -71,18 +66,22 @@ def read_success_packet(socket, data):
 		else:
 			send_data(udp_socket, file_name, current_window, protocol.window_size)	
 
-		for socket in sockets:
-			socket.sendall(StreamEndPacket.pack(current_window), 2048)
+		send_eos(sockets, current_window)
 
 
-# Reads negative acknoledgement
+# Reads negative acknowledgment
 def read_request_packet(data, file_name):
 	global current_window
+	global last_window_size
+	global last_window
 
-	resend_data(data, udp_socket, file_name, current_window)
+	if (current_window == last_window):
+			resend_data(data, udp_socket, file_name, current_window, last_window_size)
+	else:
+			resend_data(data, udp_socket, file_name, current_window, protocol.window_size)
+	
 
-	for socket in sockets:
-		socket.sendall(StreamEndPacket.pack(current_window), 2048)
+	send_eos(sockets, current_window)
 
 # Set up an UDP socket
 udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -107,7 +106,7 @@ while True:
 
 	# Read data from all sockets that are input ready
 	for socket in input_ready:
-			data = socket.recv(protocol.max_packet_size)
+			data = socket.recv(protocol.tcp_buffer)
 	
 			if (data[:3] == protocol.name and data[3:4] == protocol.version):
 				if data[4:5] == protocol.success_packet_type:
@@ -117,7 +116,6 @@ while True:
 					read_request_packet(data, file_name)
 
 	if not (input_ready or output_ready):
-		for socket in sockets:
-			socket.sendall(StreamEndPacket.pack(current_window), 2048)
+		send_eos(sockets, current_window)
 
 	

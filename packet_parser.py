@@ -1,5 +1,6 @@
 import protocol
 import sys
+import hashlib
 
 from packet import *
 
@@ -11,6 +12,13 @@ def send_message(message, tcp_socket):
 	except:
 		print >> sys.stderr, "Connection closed by the sender.\n"
 
+def calculate_window_checksum(window_number):
+    offset = window_number * protocol.window_size * protocol.data_payload_size 
+    
+    file.seek(offset)
+    window_data = file.read(protocol.window_size * protocol.data_payload_size)
+    
+    return "%X"%(zlib.crc32(window_data, 0) & 0xFFFFFFFF)
 
 # Reads start of stream packet
 def readStreamStartPacket(data, tcp_socket):
@@ -19,10 +27,12 @@ def readStreamStartPacket(data, tcp_socket):
 	global last_window
 	global window_size
 	global last_window_size
+	global file_name
+	global file_checksum
 
-	packet = StreamStartPacket.unpack(data[:34])
+	packet = StreamStartPacket.unpack(data[:281])
 
-	file_name = packet[7].split(b'\0',1)[0]
+	file_name = packet[8].split(b'\0',1)[0]
 	print >> sys.stderr, 'Incoming file: %s' % file_name
 	file = open(file_name + ".received", "w+b")
 
@@ -35,13 +45,13 @@ def readStreamStartPacket(data, tcp_socket):
 
 	last_window_size = packet[6]
 
+	file_checksum = packet[7]
+
 	send_message(SuccessPacket.pack(current_window), tcp_socket)
 
 
 # Reads end of stream packet
 def readStreamEndPacket(data, tcp_socket):
-	packet = StreamEndPacket.unpack(data[:8])
-
 	global expected_packet
 	global packets_missing
 	global number_of_packets
@@ -51,8 +61,11 @@ def readStreamEndPacket(data, tcp_socket):
 	global current_window
 	global last_window
 	global last_window_size
-
+	global file_hash
 	global total
+	global file_checksum
+
+	packet = StreamEndPacket.unpack(data[:16])
 
 	if (packet[3] < current_window):
 		send_message(SuccessPacket.pack(current_window - 1), tcp_socket)
@@ -82,9 +95,8 @@ def readStreamEndPacket(data, tcp_socket):
 		# Check if packets are missing and request the mising ones 
 		print >> sys.stderr, "Missing packets: %d \n" % (len(packets_missing))
 
-		if (len(packets_missing) > 400):
-			request_list = packets_missing[0: 400]
-			requestPacket = RequestPacket.packHeader(len(request_list)) + RequestPacket.packPayload(len(request_list) , request_list)
+		if (len(packets_missing) > window_size):
+			requestPacket = RequestPacket.packHeader(0)
 			send_message(requestPacket, tcp_socket)
 		else:
 			requestPacket = RequestPacket.packHeader(len(packets_missing)) + RequestPacket.packPayload(len(packets_missing) , packets_missing)
@@ -94,32 +106,48 @@ def readStreamEndPacket(data, tcp_socket):
 	else:
 		print >> sys.stderr, "Sending success packet: %d bytes" % len(SuccessPacket.pack(current_window))
 
-		
-
 		if (current_window == last_window):
 			file_received = True
-			print >> sys.stderr, "Packets received: %d" % total 
-			print >> sys.stderr, "File succesfuly received."
+			print >> sys.stderr, file_name
 
-		current_window += 1
+			computed_checksum = calculate_checksum(file_name + ".received")
 
-		expected_packet = 1
-		packets_missing = []
-		window_finished = False
+	
+			if (computed_checksum == file_checksum):
+				send_message(SuccessPacket.pack(current_window), tcp_socket)
+				print >> sys.stderr, "File has been succesfuly received."
+			else:
+				print >> sys.stderr, "Received file is corrupted. CRC32 check failed."
 
-		if (current_window == last_window):
-			window_size = last_window_size
-
-		print >> sys.stderr, "ACK WINDOW %d" % (current_window - 1)
- 		send_message(SuccessPacket.pack(current_window - 1), tcp_socket)	
-
+		# Determine if the window is not corrupted
+		computed_window_checksum = calculate_window_checksum(current_window)
 		
+
+		if (computed_window_checksum == packet[4].split(b'\0',1)[0]):
+			current_window += 1
+
+			expected_packet = 1
+			packets_missing = []
+			window_finished = False
+
+			if (current_window == last_window):
+				window_size = last_window_size
+
+			print >> sys.stderr, "ACK WINDOW %d. CHECKSUM - OK" % (current_window - 1)
+	 		send_message(SuccessPacket.pack(current_window - 1), tcp_socket)	
+
+	 	else:
+	 		print >> sys.stderr, "Window is corrupted. Requesting resend..."	
+			requestPacket = RequestPacket.packHeader(0)
+			send_message(requestPacket, tcp_socket)
+			sys.exit(0)
  	
 
 # Reads data packet and writes data to file
 def readDataPacket(packet, data, current_window):
-	file.seek(current_window * protocol.window_size * protocol.data_payload_size + (packet[4] - 1) * protocol.data_payload_size)
-	file.write(data[12:(12 + packet[5])])
+	file.seek(current_window * protocol.window_size * protocol.data_payload_size 
+		+ (packet[4] - 1) * protocol.data_payload_size)
+	file.write(data[16:(16 + packet[5])])
 
 # Parses an incoming packet
 def parsePacket(data, tcp_socket):
@@ -142,7 +170,7 @@ def parsePacket(data, tcp_socket):
 		readStreamStartPacket(data, tcp_socket)
 
 	if (data[4:5] == protocol.data_packet_type):
-		packet = DataPacket.unpackHeader(data[:12])
+		packet = DataPacket.unpackHeader(data[:16])
 
 		if (packet[3] != current_window):
 			return

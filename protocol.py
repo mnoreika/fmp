@@ -8,8 +8,9 @@ server_address = ('', 8889)
 tcp_ip = '127.0.0.1'
 tcp_port = 9999
 
-max_packet_size = 10000
-data_payload_size = 5000
+max_packet_size = 4200
+tcp_buffer = 1000
+data_payload_size = 4000
 
 window_size = 400
 
