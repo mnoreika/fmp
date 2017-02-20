@@ -45,7 +45,7 @@ def readStreamStartPacket(data, tcp_socket):
 
 	last_window_size = packet[6]
 
-	file_checksum = packet[7]
+	file_checksum = packet[7].split(b'\0',1)[0]
 
 	send_message(SuccessPacket.pack(current_window), tcp_socket)
 
@@ -111,7 +111,6 @@ def readStreamEndPacket(data, tcp_socket):
 			print >> sys.stderr, file_name
 
 			computed_checksum = calculate_checksum(file_name + ".received")
-
 	
 			if (computed_checksum == file_checksum):
 				send_message(SuccessPacket.pack(current_window), tcp_socket)
@@ -121,7 +120,7 @@ def readStreamEndPacket(data, tcp_socket):
 
 		# Determine if the window is not corrupted
 		computed_window_checksum = calculate_window_checksum(current_window)
-		
+
 
 		if (computed_window_checksum == packet[4].split(b'\0',1)[0]):
 			current_window += 1
@@ -140,7 +139,6 @@ def readStreamEndPacket(data, tcp_socket):
 	 		print >> sys.stderr, "Window is corrupted. Requesting resend..."	
 			requestPacket = RequestPacket.packHeader(0)
 			send_message(requestPacket, tcp_socket)
-			sys.exit(0)
  	
 
 # Reads data packet and writes data to file
