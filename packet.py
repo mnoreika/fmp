@@ -4,14 +4,13 @@ import zlib
 
 
 class StreamStartPacket(object):
-	packet_structure = '3s c c I H H H 8s 255s' 
+	packet_structure = '3s c c I H H 8s 255s' 
 
 	def __init__ (self, file_name, packet_size, number_of_packets, 
 		number_of_windows, last_window_size, file_checksum):
 		self.file_name = file_name
 		self.protocol_packet_type = 'S'
 		self.packet_size = packet_size
-		self.number_of_packets = number_of_packets
 		self.number_of_windows = number_of_windows
 		self.last_window_size = last_window_size
 		self.file_checksum = file_checksum
@@ -23,7 +22,6 @@ class StreamStartPacket(object):
 			protocol.version,
 			protocol.start_packet_type, 
 		 	self.packet_size, 
-		 	self.number_of_packets,
 		 	self.number_of_windows,
 		 	self.last_window_size,
 		 	self.file_checksum,
@@ -112,7 +110,7 @@ class SuccessPacket(object):
 	def unpack(data):
 		return struct.unpack(SuccessPacket.packet_structure, data)
 
-
+# Calcuates the CRC32 checksum of the file
 def calculate_checksum(file_name):
     prev_chunk = 0
 

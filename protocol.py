@@ -8,13 +8,13 @@ server_address = ('', 8889)
 tcp_ip = '127.0.0.1'
 tcp_port = 9999
 
-max_packet_size = 4200
-tcp_buffer = 1000
-data_payload_size = 4000
+data_payload_size = 20000
+window_size = 800
 
-window_size = 400
+udp_buffer = data_payload_size + 2048
+tcp_buffer = 2048
 
-transmission_delay = 0.000001
+transmission_delay = 0
 
 start_packet_type = 'S'
 end_packet_type = 'E'
@@ -24,3 +24,5 @@ success_packet_type = 'K'
 
 socket_timeout = 0.2
 time_to_live = 1
+
+read_timeout = 0.5
